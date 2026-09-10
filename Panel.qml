@@ -273,7 +273,7 @@ Item {
               text: "Open links on the current workspace"
               enabled: !root.busy && root.workspaceSupported
               checked: root.workspaceMode && root.workspaceSupported
-              onClicked: root.workspaceMode = checked
+              onToggled: root.workspaceMode = checked
               font { family: Style.font.family; pixelSize: 14; bold: true }
               palette.windowText: Color.foreground
               palette.highlight: Color.accent
@@ -345,6 +345,8 @@ Item {
             flat: true
             enabled: !root.busy && root.browserState.can_restore === true
             onClicked: root.execute("restore", [])
+            Keys.onReturnPressed: if (enabled) clicked()
+            Keys.onEnterPressed: if (enabled) clicked()
             palette.buttonText: Color.foreground
             font { family: Style.font.family; pixelSize: 13 }
           }
@@ -355,6 +357,8 @@ Item {
             enabled: !root.busy && root.selected !== null
             highlighted: true
             onClicked: root.applySelection()
+            Keys.onReturnPressed: if (enabled) clicked()
+            Keys.onEnterPressed: if (enabled) clicked()
             palette.highlight: Color.accent
             palette.highlightedText: Color.background
             Layout.preferredWidth: 112
