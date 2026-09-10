@@ -200,7 +200,8 @@ def install_runtime(app):
     ("omarchy-launch-browser-settings", ' open -- "$@"'),
   ]:
     atomic_write(p["bin"] / name, '#!/bin/bash\nexec /usr/bin/python3 ' + python + arguments + '\n', 0o755)
-  if shutil.which("omarchy-launch-browser-settings") != str(p["bin"] / "omarchy-launch-browser-settings"):
+  launcher = shutil.which("omarchy-launch-browser-settings")
+  if not launcher or Path(launcher).resolve() != (p["bin"] / "omarchy-launch-browser-settings").resolve():
     raise ValueError("Add ~/.local/bin to the front of PATH before applying Browser Settings")
   # NoDisplay keeps this internal handler out of the real-browser picker.
   name = app.get_display_name().replace("\n", " ").replace("\r", " ")

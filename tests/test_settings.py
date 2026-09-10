@@ -92,6 +92,11 @@ class SettingsIntegrationTest(unittest.TestCase):
     self.assertFalse(state['same_workspace'])
     self.assertIn('text/plain=editor.desktop', self.mime.read_text())
 
+  def test_equivalent_local_bin_path_from_shell_environment(self):
+    self.env['PATH'] = str(self.data / '../bin') + ':' + str(self.commands) + ':/usr/bin:/bin'
+    state = self.backend('apply', '--browser', 'chromium.desktop', '--workspace')
+    self.assertTrue(state['same_workspace'])
+
   def test_workspace_mode_installs_valid_independent_handler(self):
     state = self.backend('apply', '--browser', 'chromium.desktop', '--workspace')
     self.assertEqual(set(state['defaults'].values()), {settings.DESKTOP_ID})
