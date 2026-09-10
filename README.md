@@ -184,6 +184,9 @@ workspace reuse/creation, special workspaces, grouping, private/new-window
 requests and concurrent URL requests. Tests use temporary user directories;
 router tests fake compositor and process-launch commands.
 
+See [TESTING.md](TESTING.md) for the release validation record, including live
+Chromium, Google Chrome and OS default-handler checks.
+
 ## License
 
 MIT. Copyright © 2026 agata. This is a community plugin, not an official Omarchy
