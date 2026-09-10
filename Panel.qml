@@ -166,12 +166,15 @@ Item {
           }
           Item { Layout.fillWidth: true }
           Controls.Button {
+            id: closeButton
             text: "×"
             enabled: !root.busy
             flat: true
             font.pixelSize: 24
             onClicked: root.dismiss()
             palette.buttonText: Color.foreground
+            Layout.preferredWidth: 36
+            Layout.preferredHeight: 36
           }
         }
 
@@ -274,6 +277,35 @@ Item {
               font { family: Style.font.family; pixelSize: 14; bold: true }
               palette.windowText: Color.foreground
               palette.highlight: Color.accent
+              spacing: 12
+              leftPadding: 0
+              rightPadding: 0
+              opacity: enabled ? 1 : 0.5
+              indicator: Rectangle {
+                implicitWidth: 38
+                implicitHeight: 22
+                x: 0
+                y: (workspaceSwitch.height - height) / 2
+                radius: 11
+                color: workspaceSwitch.checked ? Color.accent : Qt.alpha(Color.foreground, 0.2)
+                border.width: workspaceSwitch.activeFocus ? 2 : 0
+                border.color: Color.foreground
+                Rectangle {
+                  width: 16; height: 16; radius: 8
+                  x: workspaceSwitch.checked ? 19 : 3
+                  anchors.verticalCenter: parent.verticalCenter
+                  color: Color.background
+                  Behavior on x { NumberAnimation { duration: 100 } }
+                }
+              }
+              contentItem: Text {
+                text: workspaceSwitch.text
+                font: workspaceSwitch.font
+                color: Color.foreground
+                verticalAlignment: Text.AlignVCenter
+                leftPadding: 50
+                wrapMode: Text.WordWrap
+              }
             }
             Text {
               Layout.fillWidth: true
@@ -314,9 +346,11 @@ Item {
             enabled: !root.busy && root.browserState.can_restore === true
             onClicked: root.execute("restore", [])
             palette.buttonText: Color.foreground
+            font { family: Style.font.family; pixelSize: 13 }
           }
           Item { Layout.fillWidth: true }
           Controls.Button {
+            id: applyButton
             text: root.busy ? "Please wait…" : "Apply"
             enabled: !root.busy && root.selected !== null
             highlighted: true
@@ -324,6 +358,22 @@ Item {
             palette.highlight: Color.accent
             palette.highlightedText: Color.background
             Layout.preferredWidth: 112
+            Layout.preferredHeight: 38
+            font { family: Style.font.family; pixelSize: 14; bold: true }
+            background: Rectangle {
+              radius: 6
+              color: applyButton.enabled ? Color.accent : Qt.alpha(Color.foreground, 0.1)
+              opacity: applyButton.down ? 0.8 : 1
+              border.width: applyButton.activeFocus ? 2 : 0
+              border.color: Color.foreground
+            }
+            contentItem: Text {
+              text: applyButton.text
+              font: applyButton.font
+              color: applyButton.enabled ? Color.background : Color.muted
+              horizontalAlignment: Text.AlignHCenter
+              verticalAlignment: Text.AlignVCenter
+            }
           }
         }
       }
