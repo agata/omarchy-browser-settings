@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.agata.browser-settings",
+  "name": "Browser Settings",
+  "version": "0.1.0",
+  "author": "agata",
+  "license": "MIT",
+  "description": "Choose your default browser and optionally open links on the current workspace.",
+  "kinds": ["bar-widget", "panel"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml",
+    "panel": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Browser Settings",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

@@ -1,0 +1,6 @@
+#!/bin/bash
+# omarchy:summary=Select the default browser and optional current-workspace routing
+# omarchy:args=[status|apply|restore|uninstall]
+set -euo pipefail
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+exec /usr/bin/python3 "$script_dir/../lib/browser_settings.py" "$@"

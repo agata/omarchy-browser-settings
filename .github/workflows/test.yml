@@ -1,0 +1,17 @@
+name: Tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-glib-2.0 xdg-utils desktop-file-utils jq
+      - name: Check shell syntax and run isolated tests
+        run: |
+          bash -n bin/omarchy-setup-browser-settings lib/workspace-router
+          /usr/bin/python3 -m unittest discover -s tests -v

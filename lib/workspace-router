@@ -1,0 +1,177 @@
+#!/bin/bash
+
+# omarchy:summary=Open links in a browser on the current Hyprland workspace
+# omarchy:args=[--new-window|--private] [url...]
+# Called by Browser Settings after validating the selected desktop application.
+
+set -euo pipefail
+
+# Keep the real browser separate from its XDG handler to avoid recursion.
+# This adapter supports Chromium and its derivatives with one normal profile.
+browser_command=("${OMARCHY_ROUTER_EXECUTABLE:?Missing browser executable}")
+browser_class=${OMARCHY_ROUTER_CLASS:?Missing browser class}
+
+new_window=false
+# XDG intentionally points at this router instead of chromium.desktop.
+browser_options=(--no-default-browser-check)
+urls=()
+for argument in "$@"; do
+  case $argument in
+  --help | -h)
+    echo "Usage: omarchy-launch-browser-settings [--new-window|--private] [url...]"
+    echo "Open links in a Chromium window on the current workspace."
+    exit 0
+    ;;
+  --new-window) new_window=true ;;
+  --private | --incognito)
+    new_window=true
+    browser_options+=(--incognito)
+    ;;
+  --) ;;
+  -*) echo "Unsupported option: $argument" >&2; exit 2 ;;
+  *) urls+=("$argument") ;;
+  esac
+done
+
+launch() {
+  # uwsm-app may wait for a scope's lifetime. Dispatch it through a service so
+  # the handler can observe new windows and release its lock after routing.
+  systemd-run --user --quiet --collect --service-type=exec \
+    --unit="omarchy-browser-settings-$$-$(date +%s%N)" \
+    --property=StandardOutput=null --property=StandardError=null \
+    uwsm-app -- "${browser_command[@]}" "${browser_options[@]}" "$@" -- "${urls[@]}" 9>&- ||
+    fail "Cannot start the browser."
+}
+
+hypr_json() {
+  hyprctl -j "$1" 2>/dev/null
+}
+
+focus_window() {
+  local address=$1
+  hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null 2>&1 ||
+    hyprctl dispatch focuswindow "address:$address" >/dev/null
+}
+
+move_window() {
+  local address=$1 workspace=$2
+  local quoted_workspace
+  # A newly mapped browser can auto-join another application's group. Detach
+  # only this new window before relocating it, rather than moving that group.
+  if hypr_json clients | jq -e --arg address "$address" \
+    '.[] | select(.address == $address) | (.grouped // [] | length) > 1' >/dev/null; then
+    hyprctl dispatch "hl.dsp.window.move({ window = \"address:$address\", out_of_group = true })" >/dev/null 2>&1 ||
+      hyprctl dispatch moveoutofgroup "address:$address" >/dev/null || return 1
+  fi
+  quoted_workspace=$(jq -Rn --arg value "$workspace" '$value')
+  hyprctl dispatch "hl.dsp.window.move({ window = \"address:$address\", workspace = $quoted_workspace, follow = false })" >/dev/null 2>&1 ||
+    hyprctl dispatch movetoworkspacesilent "$workspace,address:$address" >/dev/null
+}
+
+fail() {
+  echo "Workspace browser: $*" >&2
+  notify-send --app-name=Omarchy "Browser link routing" "$*" >/dev/null 2>&1 || true
+  exit 1
+}
+
+# Capture the caller's workspace before waiting for another link request.
+# activeworkspace alone reports the regular workspace underneath a special one.
+origin=$(hypr_json activewindow | jq -c '.workspace // empty') || origin=""
+if [[ -z $origin ]]; then
+  origin=$(hypr_json monitors | jq -c '
+    first(.[] | select(.focused)) |
+    if (.specialWorkspace.id // 0) != 0 then .specialWorkspace else .activeWorkspace end
+  ') || origin=""
+fi
+
+# Outside Hyprland there is no workspace to select.
+if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+  [[ $new_window == "false" ]] || browser_options+=(--new-window)
+  launch
+  exit
+fi
+[[ -n $origin && $origin != "null" ]] || fail "Cannot read the current Hyprland workspace."
+
+workspace_id=$(jq -r '.id' <<< "$origin")
+workspace_name=$(jq -r '.name' <<< "$origin")
+[[ $workspace_id =~ ^-?[0-9]+$ && -n $workspace_name ]] || fail "Cannot identify the current workspace."
+if (( workspace_id < 0 )); then
+  workspace_target=$workspace_name
+else
+  workspace_target=$workspace_id
+fi
+
+lock_dir=${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is required}/omarchy-browser-settings
+mkdir -p "$lock_dir"
+chmod 700 "$lock_dir"
+exec 9>"$lock_dir/open.lock"
+flock -w 30 9 || fail "Another browser request is still running."
+
+clients=$(hypr_json clients) || fail "Cannot read browser windows."
+target=""
+if [[ $new_window == "false" ]]; then
+  target=$(jq -r --argjson workspace "$workspace_id" --arg class "$browser_class" '
+    first(.[] | select(.workspace.id == $workspace and .mapped != false) |
+      select(.class | test($class)) |
+      select((.title // "" | startswith("DevTools")) | not)).address // empty
+  ' <<< "$clients")
+fi
+
+if [[ -n $target ]]; then
+  focus_window "$target" || fail "Cannot focus the selected browser."
+  # Confirm compositor focus, then let Chromium consume Wayland activation.
+  # This is deliberately bounded; compositor focus is not a browser-side ACK.
+  ready=false
+  for (( attempt = 0; attempt < 40; attempt++ )); do
+    active=$(hypr_json activewindow) || active='{}'
+    if jq -e --arg address "$target" --argjson workspace "$workspace_id" \
+      '.address == $address and .workspace.id == $workspace' <<< "$active" >/dev/null; then
+      ready=true
+      break
+    fi
+    sleep 0.025
+  done
+  [[ $ready == "true" ]] || fail "The selected browser did not receive focus."
+  sleep 0.15
+  active=$(hypr_json activewindow) || active='{}'
+  jq -e --arg address "$target" --argjson workspace "$workspace_id" \
+    '.address == $address and .workspace.id == $workspace' <<< "$active" >/dev/null ||
+    fail "Focus changed before the link could be opened. Please open the link again."
+  if (( ${#urls[@]} > 0 )); then
+    launch
+    # Keep another queued request from changing Chromium's target immediately.
+    sleep 0.25
+  fi
+  exit
+fi
+
+before=$(jq -c '[.[].address]' <<< "$clients")
+launch --new-window
+
+# Chromium reuses its existing process, so PID-based exec workspace rules alone
+# cannot place this window. Only move a window created by this launch interval;
+# never pull an existing browser from another workspace.
+for (( attempt = 0; attempt < 200; attempt++ )); do
+  clients=$(hypr_json clients) || clients='[]'
+  created=$(jq -c --argjson before "$before" --arg class "$browser_class" '
+    [.[] | select(.mapped != false) | select(.class | test($class)) |
+      select(.address as $address | $before | index($address) | not)]
+  ' <<< "$clients")
+  count=$(jq 'length' <<< "$created")
+  (( count <= 1 )) || fail "Several browser windows appeared at once; leaving their placement unchanged."
+  if (( count == 1 )); then
+    target=$(jq -r '.[0].address' <<< "$created")
+    actual_workspace=$(jq -r '.[0].workspace.id' <<< "$created")
+    if [[ $actual_workspace != "$workspace_id" ]]; then
+      move_window "$target" "$workspace_target" || fail "Cannot place the new browser window."
+    fi
+    actual_workspace=$(hypr_json clients | jq -r --arg address "$target" '.[] | select(.address == $address) | .workspace.id')
+    [[ $actual_workspace == "$workspace_id" ]] || fail "The new browser is not on the requested workspace."
+    focus_window "$target" || fail "Cannot focus the new browser window."
+    sleep 0.15
+    exit
+  fi
+  sleep 0.05
+done
+
+fail "No new browser window appeared within the startup timeout."
