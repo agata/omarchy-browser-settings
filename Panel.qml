@@ -93,6 +93,14 @@ Item {
     execute("apply", extraArgs)
   }
 
+  function inspect() {
+    return JSON.stringify({ operation: operation, selected: selected, selectedId: selectedId,
+      workspaceMode: workspaceMode, feedback: feedback, backend: backend,
+      stdoutDone: stdoutDone, stderrDone: stderrDone, exitSeen: exitSeen,
+      workerRunning: worker.running, command: worker.command,
+      applyFocus: applyButton.activeFocus, switchFocus: workspaceSwitch.activeFocus })
+  }
+
   Process {
     id: worker
     stdout: StdioCollector {
