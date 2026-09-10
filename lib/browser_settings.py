@@ -85,7 +85,9 @@ def get_app(desktop_id):
     raise ValueError("Invalid desktop application ID")
   _, desktop_class = gio()
   app = desktop_class.new(desktop_id)
-  if app is None or app.get_is_hidden():
+  # Some older GIR releases expose GioUnix instance methods as functions.
+  # Calling through the class with an explicit instance works with both forms.
+  if app is None or desktop_class.get_is_hidden(app):
     raise ValueError("Browser is no longer installed: " + desktop_id)
   if desktop_id in EXCLUDED_IDS:
     raise ValueError("Select the real browser, not a routing handler")
@@ -114,7 +116,7 @@ def browsers():
     app = desktop_class.new(item.get_id()) if item.get_id() else None
     if app is None or not app.should_show() or app.get_id() in EXCLUDED_IDS:
       continue
-    if "WebBrowser" not in (app.get_categories() or "").split(";"):
+    if "WebBrowser" not in (desktop_class.get_categories(app) or "").split(";"):
       continue
     if not app.supports_uris():
       continue
